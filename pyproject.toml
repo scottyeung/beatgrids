@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=68.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "beatgrids"
+version = "0.1.0"
+description = "Vinyl rip beat grid alignment tool"
+requires-python = ">=3.10"
+dependencies = [
+    "librosa>=0.10",
+    "soundfile>=0.12",
+    "numpy>=1.24",
+]
+
+[project.scripts]
+beatgrids = "beatgrids.cli:main"
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+]
