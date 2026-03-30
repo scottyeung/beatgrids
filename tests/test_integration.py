@@ -25,7 +25,7 @@ def test_full_pipeline_reduces_drift(make_drift_track, tmp_dir):
     out_dir.mkdir()
     result = subprocess.run(
         [sys.executable, "-m", "beatgrids", "fix", str(path),
-         "-o", str(out_dir)],
+         "-o", str(out_dir), "--engine", "ffmpeg"],
         capture_output=True, text=True,
     )
     assert result.returncode == 0
@@ -55,7 +55,7 @@ def test_full_pipeline_preserves_sample_rate(make_drift_track, tmp_dir):
     out_dir.mkdir()
     subprocess.run(
         [sys.executable, "-m", "beatgrids", "fix", str(path),
-         "-o", str(out_dir)],
+         "-o", str(out_dir), "--engine", "ffmpeg"],
         capture_output=True, text=True, check=True,
     )
 
@@ -73,7 +73,7 @@ def test_full_pipeline_with_target_bpm(make_drift_track, tmp_dir):
     out_dir.mkdir()
     subprocess.run(
         [sys.executable, "-m", "beatgrids", "fix", str(path),
-         "-o", str(out_dir), "--target-bpm", "120.0"],
+         "-o", str(out_dir), "--target-bpm", "120.0", "--engine", "ffmpeg"],
         capture_output=True, text=True, check=True,
     )
 

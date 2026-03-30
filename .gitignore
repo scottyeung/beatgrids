@@ -6,3 +6,6 @@ build/
 *.pyc
 .pytest_cache/
 .venv/
+.DS_Store
+.letta/
+output/

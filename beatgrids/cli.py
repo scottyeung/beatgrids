@@ -36,6 +36,11 @@ def do_analyze(args):
         print(f"    Segment {i+1}: {local_bpm:.2f} BPM -> ratio {ratio:.4f}")
 
 
+def quantize_bpm(bpm: float, step: float) -> float:
+    """Round BPM to the nearest multiple of step."""
+    return round(bpm / step) * step
+
+
 def process_single(file_path: str, args) -> bool:
     """Process a single FLAC file. Returns True on success."""
     path = Path(file_path)
@@ -43,6 +48,9 @@ def process_single(file_path: str, args) -> bool:
         beat_times = detect_beats(path, start_bpm=args.target_bpm or 120.0)
         result = analyze_beats(beat_times)
         target_bpm = args.target_bpm or result.average_bpm
+        if args.quantize is not None:
+            target_bpm = quantize_bpm(target_bpm, args.quantize)
+            print(f"  Quantized BPM: {target_bpm:.2f} (step={args.quantize})")
         segments = build_segments(beat_times, args.segment_beats)
         ratios = compute_segment_ratios(segments, target_bpm)
 
@@ -115,7 +123,8 @@ def main():
     common.add_argument("--target-bpm", type=float, default=None,
                         help="Override target BPM (default: auto)")
     common.add_argument("--engine", choices=["ffmpeg", "rubberband"],
-                        default="ffmpeg", help="Stretch engine")
+                        default="rubberband",
+                        help="Stretch engine (default: rubberband)")
 
     # analyze
     analyze_parser = subparsers.add_parser(
@@ -133,6 +142,9 @@ def main():
     fix_parser.add_argument("file", nargs="?", help="FLAC file to fix")
     fix_parser.add_argument("-o", "--output", help="Output directory")
     fix_parser.add_argument("--batch", help="Process all FLACs in directory")
+    fix_parser.add_argument("--quantize", type=float, nargs="?", const=1.0,
+                            default=None,
+                            help="Round BPM to nearest step (default step: 1.0)")
     fix_parser.add_argument("--verify", action="store_true",
                             help="Verify output grid alignment")
     fix_parser.set_defaults(func=do_fix)

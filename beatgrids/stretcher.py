@@ -69,6 +69,70 @@ def stretch_segment_rubberband(
     subprocess.run(cmd, capture_output=True, check=True)
 
 
+def stretch_with_timemap(
+    input_path: str,
+    output_path: str,
+    beat_times: np.ndarray,
+    target_bpm: float,
+) -> None:
+    """Warp audio so each detected beat lands on an ideal grid.
+
+    Uses rubberband's --timemap to map every beat from its source
+    position to the ideal grid position. This gives per-beat correction
+    instead of per-segment averaging.
+    """
+    info = sf.info(input_path)
+    sr = info.samplerate
+    total_frames = info.frames
+
+    ideal_interval = 60.0 / target_bpm
+    first_beat = float(beat_times[0])
+
+    # Build timemap: (source_frame, target_frame) pairs
+    timemap = [(0, 0)]  # anchor start of file
+
+    for i, bt in enumerate(beat_times):
+        src = int(float(bt) * sr)
+        tgt = int((first_beat + i * ideal_interval) * sr)
+        timemap.append((src, tgt))
+
+    # Tail: keep duration after last beat unchanged
+    last_src = int(float(beat_times[-1]) * sr)
+    last_tgt = int((first_beat + (len(beat_times) - 1) * ideal_interval) * sr)
+    tail_frames = total_frames - last_src
+    total_output_frames = last_tgt + tail_frames
+    timemap.append((total_frames, total_output_frames))
+
+    time_ratio = total_output_frames / total_frames
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmpdir = Path(tmpdir)
+
+        # Write timemap file
+        map_path = tmpdir / "timemap.txt"
+        with open(map_path, "w") as f:
+            for src, tgt in timemap:
+                f.write(f"{src} {tgt}\n")
+
+        # Convert to WAV for rubberband
+        tmp_in = tmpdir / "input.wav"
+        tmp_out = tmpdir / "output.wav"
+        audio, _ = sf.read(input_path, dtype="float64")
+        sf.write(str(tmp_in), audio, sr, subtype=info.subtype)
+
+        cmd = [
+            "rubberband",
+            "--timemap", str(map_path),
+            "-t", f"{time_ratio:.10f}",
+            str(tmp_in),
+            str(tmp_out),
+        ]
+        subprocess.run(cmd, capture_output=True, check=True)
+
+        stretched, _ = sf.read(str(tmp_out), dtype="float64")
+        sf.write(output_path, stretched, sr, subtype=info.subtype)
+
+
 def stretch_and_concat(
     input_path: str,
     output_path: str,
@@ -77,7 +141,17 @@ def stretch_and_concat(
     segment_size: int = 16,
     engine: str = "ffmpeg",
 ) -> None:
-    """Full stretch pipeline: segment, stretch, concatenate."""
+    """Full stretch pipeline.
+
+    engine="rubberband" uses per-beat timemap warping (recommended).
+    engine="ffmpeg" uses per-segment uniform stretching (fallback).
+    """
+    if engine == "rubberband":
+        return stretch_with_timemap(
+            input_path, output_path, beat_times, target_bpm
+        )
+
+    # ffmpeg path: segment-based stretching
     audio, sr = sf.read(input_path, dtype="float64")
     info = sf.info(input_path)
     subtype = info.subtype
@@ -98,11 +172,6 @@ def stretch_and_concat(
         end_sample = min(int(end_sec * sr), total_samples)
         boundaries.append((start_sample, end_sample))
 
-    stretch_fn = (
-        stretch_segment_ffmpeg if engine == "ffmpeg"
-        else stretch_segment_rubberband
-    )
-
     crossfade_samples = int(0.010 * sr)  # 10ms
 
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -116,7 +185,7 @@ def stretch_and_concat(
             head_path = tmpdir / "head.wav"
             head_out = tmpdir / "head_stretched.wav"
             sf.write(str(head_path), head_audio, sr, subtype=subtype)
-            stretch_fn(str(head_path), str(head_out), ratios[0])
+            stretch_segment_ffmpeg(str(head_path), str(head_out), ratios[0])
             head_stretched, _ = sf.read(str(head_out), dtype="float64")
             stretched_parts.append(head_stretched)
 
@@ -126,7 +195,7 @@ def stretch_and_concat(
             seg_path = tmpdir / f"seg_{i:04d}.wav"
             seg_out = tmpdir / f"seg_{i:04d}_stretched.wav"
             sf.write(str(seg_path), seg_audio, sr, subtype=subtype)
-            stretch_fn(str(seg_path), str(seg_out), ratio)
+            stretch_segment_ffmpeg(str(seg_path), str(seg_out), ratio)
             seg_stretched, _ = sf.read(str(seg_out), dtype="float64")
             stretched_parts.append(seg_stretched)
 
@@ -137,7 +206,7 @@ def stretch_and_concat(
             tail_path = tmpdir / "tail.wav"
             tail_out = tmpdir / "tail_stretched.wav"
             sf.write(str(tail_path), tail_audio, sr, subtype=subtype)
-            stretch_fn(str(tail_path), str(tail_out), ratios[-1])
+            stretch_segment_ffmpeg(str(tail_path), str(tail_out), ratios[-1])
             tail_stretched, _ = sf.read(str(tail_out), dtype="float64")
             stretched_parts.append(tail_stretched)
 
