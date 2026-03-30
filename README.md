@@ -67,6 +67,21 @@ beatgrids fix track.flac -o output/ --engine ffmpeg
 | `-o / --output` | Output directory |
 | `--batch` | Process all FLACs in a directory |
 
+## Engine comparison
+
+Tested on an 11-minute vinyl rip (1393 beats):
+
+| Metric | ffmpeg (per-segment) | rubberband (per-beat timemap) |
+|--------|----------------------|------------------------------|
+| Mean deviation | -97.8ms | -1.0ms |
+| Std deviation | 41.2ms | 4.5ms |
+| Max deviation | 189.1ms | 32.0ms |
+| Beats within 10ms | 19/1393 (1.4%) | 1366/1393 (98.1%) |
+| Beats within 20ms | 57/1393 (4.1%) | 1391/1393 (99.9%) |
+| Max cumulative drift | -155ms | -13ms |
+
+The ffmpeg engine applies a uniform stretch per 16-beat segment. The rubberband engine warps each individual beat to its ideal grid position using a timemap, giving dramatically better alignment.
+
 ## Tests
 
 ```bash
